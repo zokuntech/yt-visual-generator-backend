@@ -2,8 +2,8 @@ import os
 import base64
 import logging
 import re
-import google.generativeai as genai
 from typing import Optional, Tuple
+from google import genai
 from app.models.scene import VisualPrompt
 
 logger = logging.getLogger(__name__)
@@ -30,9 +30,13 @@ class ImageService:
         if not api_key:
             raise ValueError("GOOGLE_GEMINI_API_KEY environment variable is required")
         
-        genai.configure(api_key=api_key)
-        # Using Gemini 2.5 Flash Image (Nano Banana) for fast image generation
         self.model_name = "gemini-2.5-flash-image"
+        
+        # Using NEW Google Gen AI SDK with aspect ratio support
+        # https://ai.google.dev/gemini-api/docs/image-generation#aspect_ratios_and_image_size
+        logger.info("🎨 Initializing Google Gen AI SDK with aspect ratio support")
+        os.environ["GOOGLE_API_KEY"] = api_key
+        self.client = genai.Client()
     
     def _save_debug_image(self, image_bytes: bytes, scene_id: str):
         """Save image to disk for debugging (optional)"""
@@ -56,91 +60,58 @@ class ImageService:
         try:
             # Convert structured prompt to natural language
             prompt_text = self._convert_to_text_prompt(visual_prompt)
-            logger.info(f"🎨 Calling Gemini API...")
+            
+            # Get aspect ratio from style config (default to 16:9)
+            aspect_ratio = "16:9"
+            if visual_prompt.style and hasattr(visual_prompt.style, 'aspect_ratio'):
+                aspect_ratio = visual_prompt.style.aspect_ratio
+            
+            logger.info(f"🎨 Calling Gemini API with NEW SDK (aspect ratio support)...")
             logger.info(f"   Model: {self.model_name}")
+            logger.info(f"   Aspect Ratio: {aspect_ratio}")
             logger.info(f"   Prompt: {prompt_text[:100]}...")
             
-            # Generate image using Gemini
-            model = genai.GenerativeModel(self.model_name)
-            
-            # For Gemini image generation, we use text-to-image
-            response = model.generate_content(
-                prompt_text,
-                generation_config={
-                    "temperature": 0.7,
-                    "max_output_tokens": 2048,
+            # Generate image with proper aspect ratio configuration
+            # https://ai.google.dev/gemini-api/docs/image-generation#aspect_ratios_and_image_size
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=[prompt_text],
+                config={
+                    "imageConfig": {
+                        "aspectRatio": aspect_ratio
+                    }
                 }
             )
             
             logger.info(f"   Response received from Gemini")
             
-            # Extract image from response following official Nano Banana documentation
-            # https://ai.google.dev/gemini-api/docs/image-generation
-            if hasattr(response, 'candidates') and response.candidates:
-                logger.info(f"   Checking {len(response.candidates)} candidate(s)...")
-                
-                for candidate in response.candidates:
-                    if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
-                        for part_idx, part in enumerate(candidate.content.parts):
-                            # Check for text parts (optional, just for logging)
-                            if hasattr(part, 'text') and part.text:
-                                logger.info(f"   Part {part_idx}: Found text: {part.text[:100]}...")
-                            
-                            # Check for image in inline_data
-                            if hasattr(part, 'inline_data') and part.inline_data:
-                                mime_type = getattr(part.inline_data, 'mime_type', 'unknown')
-                                logger.info(f"   Part {part_idx}: Found inline_data with mime_type: {mime_type}")
-                                
-                                if mime_type.startswith('image/'):
-                                    logger.info(f"   ✅ Image found! Extracting...")
-                                    
-                                    # Get the image data
-                                    image_data = part.inline_data.data
-                                    logger.info(f"   Data type: {type(image_data)}")
-                                    
-                                    # Check if data is bytes or base64 string
-                                    if isinstance(image_data, bytes):
-                                        logger.info(f"   Data is bytes, length: {len(image_data)}")
-                                        image_bytes = image_data
-                                    elif isinstance(image_data, str):
-                                        logger.info(f"   Data is base64 string, length: {len(image_data)}")
-                                        # It's a base64 string, decode it
-                                        image_bytes = base64.b64decode(image_data)
-                                    else:
-                                        logger.error(f"   ❌ Unexpected data type: {type(image_data)}")
-                                        raise RuntimeError(f"Unexpected image data type: {type(image_data)}")
-                                    
-                                    # Verify we got valid PNG data
-                                    if len(image_bytes) > 0:
-                                        logger.info(f"   Image bytes length: {len(image_bytes)}")
-                                        logger.info(f"   First 20 bytes: {image_bytes[:20]}")
-                                        logger.info(f"   Starts with PNG header: {image_bytes[:8] == b'\\x89PNG\\r\\n\\x1a\\n'}")
-                                    
-                                    # Save first image for debugging
-                                    if visual_prompt.scene_id:
-                                        self._save_debug_image(image_bytes, visual_prompt.scene_id)
-                                    
-                                    # Calculate cost (approximate - based on model)
-                                    cost = GEMINI_PRICING[self.model_name]["per_image"]
-                                    tokens = 1290  # Approximate tokens for flash-image model
-                                    
-                                    logger.info(f"   💰 Cost: ${cost:.6f}")
-                                    logger.info(f"   🎫 Tokens: ~{tokens}")
-                                    
-                                    data_uri = self._encode_image_to_data_uri(image_bytes)
-                                    return data_uri, cost, tokens
+            # Extract image from response
+            for part in response.parts:
+                if hasattr(part, 'text') and part.text:
+                    logger.info(f"   Found text part: {part.text[:100]}...")
+                elif hasattr(part, 'inline_data') and part.inline_data:
+                    logger.info(f"   ✅ Image found! Extracting...")
+                    image_bytes = part.inline_data.data
+                    logger.info(f"   Image bytes length: {len(image_bytes)}")
+                    
+                    if visual_prompt.scene_id:
+                        self._save_debug_image(image_bytes, visual_prompt.scene_id)
+                    
+                    cost = GEMINI_PRICING[self.model_name]["per_image"]
+                    tokens = 1290
+                    
+                    logger.info(f"   💰 Cost: ${cost:.6f}")
+                    logger.info(f"   🎫 Tokens: ~{tokens}")
+                    
+                    data_uri = self._encode_image_to_data_uri(image_bytes)
+                    return data_uri, cost, tokens
             
-            # If no image found, log error
-            logger.error(f"   ❌ No image found in response")
-            logger.error(f"   Response structure: candidates={hasattr(response, 'candidates')}")
-            if hasattr(response, 'text'):
-                logger.error(f"   Response text: {response.text[:200] if response.text else 'None'}")
-            raise RuntimeError("No image generated in response - model may not support image generation")
+            raise RuntimeError("No image generated in response")
             
         except Exception as e:
             logger.error(f"   ❌ Exception in image generation: {type(e).__name__}")
             logger.error(f"   Exception message: {str(e)}")
-            raise RuntimeError(f"Image generation failed: {str(e)}")  # This will be caught by job_processor
+            raise RuntimeError(f"Image generation failed: {str(e)}")
     
     def _convert_to_text_prompt(self, visual_prompt: VisualPrompt) -> str:
         """Convert structured JSON prompt to natural language for image generation"""
@@ -157,14 +128,20 @@ class ImageService:
         if visual_prompt.characters:
             parts.append("\nCharacters:")
             for char in visual_prompt.characters:
+                # Handle new Character structure with Expression and Pose objects
+                expression_str = char.expression.primary if hasattr(char.expression, 'primary') else str(char.expression)
+                pose_str = char.pose.body_language if hasattr(char.pose, 'body_language') else str(char.pose)
                 parts.append(
                     f"- {char.role}: {char.description}, "
-                    f"expression: {char.expression}, pose: {char.pose}"
+                    f"expression: {expression_str}, pose: {pose_str}"
                 )
         
-        # Composition
+        # Composition - Handle new Camera structure
         comp = visual_prompt.composition
-        parts.append(f"\nCamera: {comp.camera_angle}")
+        camera = comp.camera
+        parts.append(f"\nCamera: {camera.shot_type} at {camera.angle} angle")
+        if camera.movement and camera.movement != "static":
+            parts.append(f"Camera movement: {camera.movement}")
         parts.append(f"Framing: {comp.framing}")
         parts.append(f"Important: {comp.extras}")
         

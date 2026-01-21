@@ -1,5 +1,20 @@
 from .job import Job, JobStatus, JobOptions, CreateJobRequest, StyleConfig, CostBreakdown
-from .scene import Scene, ImageStatus, VisualPrompt, UpdateSceneRequest
+from .scene import (
+    Scene, 
+    ImageStatus, 
+    VisualPrompt, 
+    UpdateSceneRequest,
+    ScenePlan,
+    SceneCharacter,
+    SceneProp,
+    SceneSetting,
+    CameraIntent,
+    Expression,
+    Pose,
+    Camera,
+    Character,
+    Composition
+)
 
 __all__ = [
     "Job",
@@ -12,4 +27,14 @@ __all__ = [
     "ImageStatus",
     "VisualPrompt",
     "UpdateSceneRequest",
+    "ScenePlan",
+    "SceneCharacter",
+    "SceneProp",
+    "SceneSetting",
+    "CameraIntent",
+    "Expression",
+    "Pose",
+    "Camera",
+    "Character",
+    "Composition",
 ]

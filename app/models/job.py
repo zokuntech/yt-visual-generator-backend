@@ -8,8 +8,10 @@ import uuid
 class JobStatus(str, Enum):
     """Status of a storyboard generation job"""
     PENDING = "pending"
-    GENERATING_PROMPTS = "generating_prompts"
-    GENERATING_IMAGES = "generating_images"
+    ANALYZING_SCRIPT = "analyzing_script"  # Director working
+    AWAITING_APPROVAL = "awaiting_approval"  # Waiting for user to approve scene plans
+    GENERATING_VISUALS = "generating_visuals"  # Cinematographer + images
+    GENERATING_IMAGES = "generating_images"  # Legacy/just images
     COMPLETED = "completed"
     FAILED = "failed"
 
@@ -23,6 +25,8 @@ class StyleConfig(BaseModel):
     character_description: str = "content creator, approachable, professional casual"
     camera_angle: str = "medium_shot"
     framing: str = "centered"
+    aspect_ratio: str = "16:9"  # Image aspect ratio: "1:1", "16:9", "9:16", "4:3", "3:4"
+    preferred_settings: Optional[list[str]] = None  # User-specified locations/backgrounds to use
 
 
 class JobOptions(BaseModel):
@@ -46,6 +50,9 @@ class Job(BaseModel):
     """Represents one storyboard generation request"""
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    started_at: Optional[datetime] = None  # When processing began
+    completed_at: Optional[datetime] = None  # When processing finished
+    duration_seconds: Optional[float] = None  # Total processing time
     status: JobStatus = JobStatus.PENDING
     error_message: Optional[str] = None
     script_text: str

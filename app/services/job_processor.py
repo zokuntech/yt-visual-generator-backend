@@ -1,10 +1,12 @@
 import re
 import asyncio
 import logging
-from typing import List
-from app.models import Job, JobStatus, Scene, ImageStatus
+import traceback
+from typing import List, Optional
+from app.models import Job, JobStatus, Scene, ImageStatus, ScenePlan
 from app.storage import store
-from app.services.llm_service import llm_service
+from app.services.director_service import director_service
+from app.services.cinematographer_service import cinematographer_service
 from app.services.image_service import image_service
 
 logger = logging.getLogger(__name__)
@@ -15,7 +17,8 @@ class JobProcessor:
     
     def __init__(self):
         self.store = store
-        self.llm = llm_service
+        self.director = director_service
+        self.cinematographer = cinematographer_service
         self.image_gen = image_service
     
     async def process_job(self, job: Job) -> None:
@@ -28,18 +31,23 @@ class JobProcessor:
         try:
             logger.info(f"🚀 Starting job processing: {job.id}")
             
+            # Track start time
+            from datetime import datetime
+            job.started_at = datetime.utcnow()
+            self.store.save_job(job)
+            
             # Step 1: Split script into sentences
             logger.info(f"📝 Splitting script into sentences...")
             sentences = self._split_into_sentences(job.script_text)
             logger.info(f"   Found {len(sentences)} sentences")
             
-            # Step 2: Generate visual prompts
-            logger.info(f"🤖 Generating visual prompts using AI...")
-            job.status = JobStatus.GENERATING_PROMPTS
+            # Step 2: Generate scene plans (Director) and visual prompts (Cinematographer)
+            logger.info(f"🎬 Director analyzing script...")
+            job.status = JobStatus.ANALYZING_SCRIPT
             self.store.save_job(job)
             
             scenes = await self._generate_visual_prompts(job, sentences)
-            logger.info(f"   ✅ Generated {len(scenes)} visual prompts")
+            logger.info(f"   ✅ Generated {len(scenes)} scene plans and visual prompts")
             
             # Update job with scene IDs
             job.scene_ids = [scene.id for scene in scenes]
@@ -56,10 +64,16 @@ class JobProcessor:
             else:
                 logger.info(f"⏭️  Skipping image generation (disabled)")
             
-            # Mark as completed
+            # Mark as completed and calculate duration
+            from datetime import datetime
+            job.completed_at = datetime.utcnow()
+            if job.started_at:
+                job.duration_seconds = (job.completed_at - job.started_at).total_seconds()
             job.status = JobStatus.COMPLETED
             self.store.save_job(job)
             logger.info(f"✅ Job completed successfully: {job.id}")
+            if job.duration_seconds:
+                logger.info(f"⏱️  Duration: {job.duration_seconds:.1f}s")
             logger.info(f"💰 Total cost: ${job.cost.total_cost:.4f}")
             logger.info(f"   - Prompts: ${job.cost.prompt_generation_cost:.4f} ({job.cost.prompt_tokens_used} tokens)")
             logger.info(f"   - Images: ${job.cost.image_generation_cost:.4f} ({job.cost.num_images_generated} images)")
@@ -67,6 +81,12 @@ class JobProcessor:
         except Exception as e:
             logger.error(f"❌ Job failed: {job.id}")
             logger.error(f"   Error: {str(e)}")
+            
+            # Track failure time
+            from datetime import datetime
+            job.completed_at = datetime.utcnow()
+            if job.started_at:
+                job.duration_seconds = (job.completed_at - job.started_at).total_seconds()
             job.status = JobStatus.FAILED
             job.error_message = str(e)
             self.store.save_job(job)
@@ -84,8 +104,12 @@ class JobProcessor:
         return sentences
     
     async def _generate_visual_prompts(self, job: Job, sentences: List[str]) -> List[Scene]:
-        """Generate visual prompts for all sentences"""
+        """
+        🎬 DIRECTOR → CINEMATOGRAPHER PIPELINE
+        Generate visual prompts using 2-step process
+        """
         scenes = []
+        previous_plan: Optional[ScenePlan] = None
         
         for index, sentence in enumerate(sentences):
             logger.info(f"   Scene {index + 1}/{len(sentences)}: {sentence[:50]}...")
@@ -96,26 +120,56 @@ class JobProcessor:
                 sentence_text=sentence
             )
             
-            # Generate visual prompt using LLM
-            if self.llm:
+            # Step 1: 🎬 DIRECTOR - Analyze and plan the scene
+            if self.director:
                 try:
-                    visual_prompt, cost, tokens = self.llm.generate_visual_prompt(
+                    scene_plan, plan_cost, plan_tokens = self.director.generate_scene_plan(
                         scene_id=scene.id,
-                        sentence_text=sentence,
-                        style_config=job.options.style_config
+                        sentence=sentence,
+                        previous_plan=previous_plan,
+                        global_style=job.options.style_config
                     )
-                    scene.visual_prompt = visual_prompt
+                    scene.scene_plan = scene_plan
+                    previous_plan = scene_plan  # For next scene's context
                     
-                    # Track costs
-                    job.cost.prompt_generation_cost += cost
-                    job.cost.prompt_tokens_used += tokens
-                    job.cost.num_prompts_generated += 1
-                    job.cost.total_cost = job.cost.prompt_generation_cost + job.cost.image_generation_cost
+                    # Track director costs
+                    job.cost.prompt_generation_cost += plan_cost
+                    job.cost.prompt_tokens_used += plan_tokens
                     
-                    logger.info(f"      ✅ Prompt generated (${cost:.6f}, {tokens} tokens)")
+                    logger.info(f"      🎬 Director: {scene_plan.narrative_role} | {scene_plan.emotional_tone}")
+                    
+                    # Step 2: 🎥 CINEMATOGRAPHER - Convert plan to visual prompt
+                    if self.cinematographer:
+                        try:
+                            visual_prompt, prompt_cost, prompt_tokens = self.cinematographer.generate_visual_prompt(
+                                scene_plan=scene_plan,
+                                global_style=job.options.style_config
+                            )
+                            scene.visual_prompt = visual_prompt
+                            
+                            # Track cinematographer costs
+                            job.cost.prompt_generation_cost += prompt_cost
+                            job.cost.prompt_tokens_used += prompt_tokens
+                            job.cost.num_prompts_generated += 1
+                            job.cost.total_cost = job.cost.prompt_generation_cost + job.cost.image_generation_cost
+                            
+                            total_scene_cost = plan_cost + prompt_cost
+                            total_scene_tokens = plan_tokens + prompt_tokens
+                            logger.info(f"      🎥 Cinematographer: {visual_prompt.composition.camera.shot_type}")
+                            logger.info(f"      ✅ Scene ready (${total_scene_cost:.6f}, {total_scene_tokens} tokens)")
+                            
+                        except Exception as e:
+                            logger.error(f"      ❌ Cinematographer failed: {str(e)}")
+                            import traceback
+                            logger.error(f"      Full error traceback:")
+                            for line in traceback.format_exc().split('\n'):
+                                if line:
+                                    logger.error(f"        {line}")
+                            scene.last_error = f"Cinematographer failed: {str(e)}"
+                    
                 except Exception as e:
-                    logger.error(f"      ❌ Prompt failed: {str(e)}")
-                    scene.last_error = f"Prompt generation failed: {str(e)}"
+                    logger.error(f"      ❌ Director failed: {str(e)}")
+                    scene.last_error = f"Director failed: {str(e)}"
             
             # Save scene
             self.store.save_scene(scene)
@@ -191,6 +245,80 @@ class JobProcessor:
         except Exception as e:
             scene.image_status = ImageStatus.FAILED
             scene.last_error = f"Image generation failed: {str(e)}"
+        
+        self.store.save_scene(scene)
+        return scene
+    
+    async def regenerate_scene_with_instruction(self, scene_id: str, instruction: str) -> Scene:
+        """
+        Regenerate scene with text instruction (e.g. "make character smile", "add laptop")
+        This modifies the visual prompt based on the instruction, then generates a new image
+        """
+        scene = self.store.get_scene(scene_id)
+        if not scene:
+            raise ValueError(f"Scene not found: {scene_id}")
+        
+        if not scene.visual_prompt:
+            raise ValueError("Scene has no visual prompt")
+        
+        logger.info(f"🎨 Regenerating scene with instruction: '{instruction}'")
+        
+        scene.image_status = ImageStatus.PENDING
+        scene.last_error = None
+        self.store.save_scene(scene)
+        
+        try:
+            # Get the job for style config
+            job = self.store.get_job(scene.job_id)
+            if not job:
+                raise ValueError("Job not found")
+            
+            # Use cinematographer to modify the visual prompt based on instruction
+            if self.cinematographer and scene.scene_plan:
+                logger.info(f"   🎬 Updating visual prompt with instruction...")
+                
+                # Create a modified scene plan with the instruction
+                modified_plan = scene.scene_plan
+                
+                # Call cinematographer with instruction context
+                visual_prompt, prompt_cost, prompt_tokens = self.cinematographer.generate_visual_prompt_with_instruction(
+                    scene_plan=modified_plan,
+                    global_style=job.options.style_config,
+                    instruction=instruction
+                )
+                
+                # Update scene with new prompt
+                scene.visual_prompt = visual_prompt
+                
+                # Track costs
+                job.cost.prompt_generation_cost += prompt_cost
+                job.cost.prompt_tokens_used += prompt_tokens
+                self.store.save_job(job)
+                
+                logger.info(f"   ✅ Visual prompt updated")
+            
+            # Generate new image
+            if self.image_gen:
+                logger.info(f"   🖼️ Generating new image...")
+                image_url, cost, tokens = self.image_gen.generate_image(scene.visual_prompt)
+                scene.image_url = image_url
+                scene.image_status = ImageStatus.GENERATED
+                
+                # Update costs
+                job.cost.image_generation_cost += cost
+                job.cost.image_tokens_used += tokens
+                job.cost.total_cost = job.cost.prompt_generation_cost + job.cost.image_generation_cost
+                self.store.save_job(job)
+                
+                logger.info(f"✅ Scene regenerated with instruction (${cost:.6f})")
+            else:
+                raise RuntimeError("Image service not available")
+                
+        except Exception as e:
+            scene.image_status = ImageStatus.FAILED
+            scene.last_error = f"Regeneration failed: {str(e)}"
+            logger.error(f"❌ Regeneration with instruction failed: {str(e)}")
+            logger.error(f"   Full Traceback:\n{traceback.format_exc()}")
         
         self.store.save_scene(scene)
         return scene

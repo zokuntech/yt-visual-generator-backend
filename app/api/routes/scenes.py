@@ -1,10 +1,16 @@
 from typing import List
 from fastapi import APIRouter, HTTPException, BackgroundTasks
+from pydantic import BaseModel
 from app.models import Scene, UpdateSceneRequest
 from app.storage import store
 from app.services.job_processor import job_processor
 
 router = APIRouter(prefix="/scenes", tags=["scenes"])
+
+
+class RegenerateWithInstructionRequest(BaseModel):
+    """Request to regenerate with text instructions"""
+    instruction: str  # e.g. "make the character smile" or "add a laptop on the desk"
 
 
 @router.get("/job/{job_id}", response_model=List[Scene])
@@ -73,5 +79,40 @@ async def regenerate_scene_image(
     
     # Regenerate in background
     background_tasks.add_task(job_processor.regenerate_scene_image, scene_id)
+    
+    return scene
+
+
+@router.post("/{scene_id}/regenerate-with-instruction", response_model=Scene)
+async def regenerate_with_instruction(
+    scene_id: str,
+    request: RegenerateWithInstructionRequest,
+    background_tasks: BackgroundTasks
+) -> Scene:
+    """
+    Regenerate the image with text instructions (e.g. "make character smile", "add laptop").
+    
+    This is the EASY way to edit scenes - just provide text instructions!
+    The system will:
+    1. Take your instruction
+    2. Update the visual prompt accordingly
+    3. Generate a new image
+    """
+    scene = store.get_scene(scene_id)
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+    
+    if not scene.visual_prompt:
+        raise HTTPException(
+            status_code=400,
+            detail="Scene has no visual prompt to modify"
+        )
+    
+    # Regenerate with instructions in background
+    background_tasks.add_task(
+        job_processor.regenerate_scene_with_instruction,
+        scene_id,
+        request.instruction
+    )
     
     return scene
