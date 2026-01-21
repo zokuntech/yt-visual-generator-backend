@@ -1,7 +1,8 @@
 from .job import Job, JobStatus, JobOptions, CreateJobRequest, StyleConfig, CostBreakdown
 from .scene import (
     Scene, 
-    ImageStatus, 
+    ImageStatus,
+    VideoStatus,
     VisualPrompt, 
     UpdateSceneRequest,
     ScenePlan,
@@ -25,6 +26,7 @@ __all__ = [
     "CostBreakdown",
     "Scene",
     "ImageStatus",
+    "VideoStatus",
     "VisualPrompt",
     "UpdateSceneRequest",
     "ScenePlan",

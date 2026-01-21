@@ -12,6 +12,15 @@ class ImageStatus(str, Enum):
     FAILED = "failed"
 
 
+class VideoStatus(str, Enum):
+    """Status of video generation for a scene"""
+    NOT_REQUESTED = "not_requested"
+    PENDING = "pending"
+    PROCESSING = "processing"
+    GENERATED = "generated"
+    FAILED = "failed"
+
+
 # ===== DIRECTOR LAYER =====
 
 class SceneCharacter(BaseModel):
@@ -131,6 +140,9 @@ class Scene(BaseModel):
     visual_prompt: Optional[VisualPrompt] = None  # Cinematographer's prompt
     image_status: ImageStatus = ImageStatus.NOT_REQUESTED
     image_url: Optional[str] = None
+    video_status: VideoStatus = VideoStatus.NOT_REQUESTED
+    video_url: Optional[str] = None
+    video_operation_name: Optional[str] = None  # For tracking async Veo operation
     last_error: Optional[str] = None
 
 

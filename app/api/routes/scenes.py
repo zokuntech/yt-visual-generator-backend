@@ -1,9 +1,10 @@
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
-from app.models import Scene, UpdateSceneRequest
+from app.models import Scene, UpdateSceneRequest, VideoStatus
 from app.storage import store
 from app.services.job_processor import job_processor
+from app.services.video_service import get_video_service
 
 router = APIRouter(prefix="/scenes", tags=["scenes"])
 
@@ -11,6 +12,12 @@ router = APIRouter(prefix="/scenes", tags=["scenes"])
 class RegenerateWithInstructionRequest(BaseModel):
     """Request to regenerate with text instructions"""
     instruction: str  # e.g. "make the character smile" or "add a laptop on the desk"
+
+
+class AnimateSceneRequest(BaseModel):
+    """Request to animate a scene (convert image to video)"""
+    custom_prompt: Optional[str] = None  # Optional: override the scene text
+    aspect_ratio: str = "16:9"  # "16:9" (landscape) or "9:16" (portrait)
 
 
 @router.get("/job/{job_id}", response_model=List[Scene])
@@ -116,3 +123,136 @@ async def regenerate_with_instruction(
     )
     
     return scene
+
+
+@router.post("/{scene_id}/animate", response_model=Scene)
+async def animate_scene(
+    scene_id: str,
+    request: AnimateSceneRequest
+) -> Scene:
+    """
+    🎬 Animate a scene - Convert the generated image into an 8-second video using Veo 3.1
+    
+    This endpoint starts the video generation process. The video generation is asynchronous
+    and can take 11 seconds to 6 minutes to complete.
+    
+    After calling this endpoint, poll GET /scenes/{scene_id}/video-status to check progress.
+    
+    Requirements:
+    - Scene must have a generated image (image_status = "generated")
+    
+    Returns:
+    - Scene with video_status = "pending" and video_operation_name set
+    """
+    scene = store.get_scene(scene_id)
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+    
+    # Check if image exists
+    if not scene.image_url:
+        raise HTTPException(
+            status_code=400,
+            detail="Scene has no generated image. Generate an image first before animating."
+        )
+    
+    # Get video service
+    video_service = get_video_service()
+    if not video_service:
+        raise HTTPException(
+            status_code=503,
+            detail="Video service not available. Check GOOGLE_GEMINI_API_KEY."
+        )
+    
+    try:
+        # Start video generation
+        operation_name, estimated_cost = video_service.generate_video_from_scene(
+            scene=scene,
+            custom_prompt=request.custom_prompt,
+            aspect_ratio=request.aspect_ratio
+        )
+        
+        # Update scene
+        scene.video_status = VideoStatus.PENDING
+        scene.video_operation_name = operation_name
+        scene.last_error = None
+        store.save_scene(scene)
+        
+        return scene
+        
+    except Exception as e:
+        scene.video_status = VideoStatus.FAILED
+        scene.last_error = f"Failed to start video generation: {str(e)}"
+        store.save_scene(scene)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{scene_id}/video-status", response_model=Scene)
+async def check_video_status(scene_id: str) -> Scene:
+    """
+    📊 Check the status of video generation for a scene
+    
+    Poll this endpoint after calling POST /scenes/{scene_id}/animate to check if the
+    video is ready.
+    
+    Video Status:
+    - "not_requested": No video generation requested yet
+    - "pending": Video generation just started (operation submitted)
+    - "processing": Video is being generated (checked at least once, still not done)
+    - "generated": Video is ready! Check scene.video_url
+    - "failed": Video generation failed, check scene.last_error
+    
+    Polling Strategy:
+    - Poll every 5-10 seconds
+    - Video generation typically takes 11s - 6min
+    - Videos are stored for 2 days after generation
+    """
+    scene = store.get_scene(scene_id)
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+    
+    # If no video operation, return current state
+    if not scene.video_operation_name:
+        return scene
+    
+    # If already done (generated or failed), return current state
+    if scene.video_status in [VideoStatus.GENERATED, VideoStatus.FAILED]:
+        return scene
+    
+    # Check status with video service
+    video_service = get_video_service()
+    if not video_service:
+        raise HTTPException(
+            status_code=503,
+            detail="Video service not available"
+        )
+    
+    try:
+        is_done, video_url, error_message = video_service.check_video_status(
+            scene.video_operation_name
+        )
+        
+        if not is_done:
+            # Still processing
+            scene.video_status = VideoStatus.PROCESSING
+        elif error_message:
+            # Failed
+            scene.video_status = VideoStatus.FAILED
+            scene.last_error = error_message
+        elif video_url:
+            # Success!
+            scene.video_status = VideoStatus.GENERATED
+            scene.video_url = video_url
+            scene.last_error = None
+        else:
+            # Unexpected state
+            scene.video_status = VideoStatus.FAILED
+            scene.last_error = "Unexpected state - operation done but no video or error"
+        
+        store.save_scene(scene)
+        return scene
+        
+    except Exception as e:
+        scene.video_status = VideoStatus.FAILED
+        scene.last_error = f"Error checking video status: {str(e)}"
+        store.save_scene(scene)
+        raise HTTPException(status_code=500, detail=str(e))
