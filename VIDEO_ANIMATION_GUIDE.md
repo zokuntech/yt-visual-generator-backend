@@ -2,7 +2,7 @@
 
 ## Overview
 
-You can now animate any generated scene image into an **8-second video** using Google's Veo 3.1! This feature converts still images into dynamic videos with motion and (optionally) sound.
+You can now animate any generated scene image into a **6-second video** using Google's Veo 3.1! This feature converts still images into dynamic videos with motion and (optionally) sound.
 
 ## Quick Start
 
@@ -254,7 +254,7 @@ await fetch(`/api/scenes/${sceneId}/animate`, {
 
 ### Video Specifications
 
-- **Duration**: 8 seconds
+- **Duration**: 6 seconds
 - **Resolution**: 720p (can be upgraded to 1080p or 4k)
 - **Frame Rate**: 24fps
 - **Format**: MP4
@@ -266,8 +266,8 @@ await fetch(`/api/scenes/${sceneId}/animate`, {
 
 Video generation cost is automatically tracked:
 
-- **Veo 3.1 Fast**: ~$0.12 per 8-second video
-- **Veo 3.1 Regular**: ~$0.20 per 8-second video (higher quality)
+- **Veo 3.1 Fast**: ~$0.09 per 6-second video
+- **Veo 3.1 Regular**: ~$0.15 per 6-second video (higher quality)
 
 Cost is added to the job's total cost breakdown.
 

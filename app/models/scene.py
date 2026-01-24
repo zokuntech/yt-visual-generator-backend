@@ -144,6 +144,10 @@ class Scene(BaseModel):
     video_url: Optional[str] = None
     video_operation_name: Optional[str] = None  # For tracking async Veo operation
     last_error: Optional[str] = None
+    
+    # Cost tracking for UI live counter
+    generation_cost: float = 0.0  # Initial generation (director + cinematographer + image)
+    last_operation_cost: float = 0.0  # Most recent operation cost (for edits/regenerations)
 
 
 class UpdateSceneRequest(BaseModel):

@@ -93,15 +93,68 @@ class JobProcessor:
             raise
     
     def _split_into_sentences(self, text: str) -> List[str]:
-        """Split text into sentences"""
-        # Simple sentence splitting (can be improved with NLTK/spaCy)
-        # Split on periods, exclamation marks, and question marks followed by space
-        sentences = re.split(r'(?<=[.!?])\s+', text)
+        """
+        Split text into scene-appropriate segments.
         
-        # Clean and filter empty sentences
-        sentences = [s.strip() for s in sentences if s.strip()]
+        Groups sentences to match typical speaking pace (5-6 seconds per scene).
+        Average speaking rate: ~2.5 words/second, so target 12-15 words per scene.
+        """
+        # First, split into individual sentences
+        raw_sentences = re.split(r'(?<=[.!?])\s+', text)
+        raw_sentences = [s.strip() for s in raw_sentences if s.strip()]
         
-        return sentences
+        # Now group sentences into scenes based on word count
+        scenes = []
+        current_scene = []
+        current_word_count = 0
+        
+        TARGET_WORDS_PER_SCENE = 15  # ~6 seconds at 2.5 words/sec
+        MAX_WORDS_PER_SCENE = 25     # Max ~10 seconds
+        MAX_SENTENCES_PER_SCENE = 3  # Don't combine too many sentences
+        
+        for sentence in raw_sentences:
+            word_count = len(sentence.split())
+            
+            # If this sentence alone is long enough, make it its own scene
+            if word_count >= TARGET_WORDS_PER_SCENE:
+                # Save any accumulated sentences first
+                if current_scene:
+                    scenes.append(' '.join(current_scene))
+                    current_scene = []
+                    current_word_count = 0
+                
+                # Add the long sentence as its own scene
+                scenes.append(sentence)
+                continue
+            
+            # Check if adding this sentence would exceed limits
+            would_exceed_words = (current_word_count + word_count) > MAX_WORDS_PER_SCENE
+            would_exceed_count = len(current_scene) >= MAX_SENTENCES_PER_SCENE
+            
+            if current_scene and (would_exceed_words or would_exceed_count):
+                # Save current scene and start new one
+                scenes.append(' '.join(current_scene))
+                current_scene = [sentence]
+                current_word_count = word_count
+            else:
+                # Add to current scene
+                current_scene.append(sentence)
+                current_word_count += word_count
+                
+                # If we've reached target, save it
+                if current_word_count >= TARGET_WORDS_PER_SCENE:
+                    scenes.append(' '.join(current_scene))
+                    current_scene = []
+                    current_word_count = 0
+        
+        # Add any remaining sentences
+        if current_scene:
+            scenes.append(' '.join(current_scene))
+        
+        logger.info(f"   📊 Grouped {len(raw_sentences)} sentences into {len(scenes)} scenes")
+        logger.info(f"   ⏱️  Estimated duration: ~{len(scenes) * 5.5:.0f} seconds")
+        
+        return scenes
     
     async def _generate_visual_prompts(self, job: Job, sentences: List[str]) -> List[Scene]:
         """
@@ -155,6 +208,10 @@ class JobProcessor:
                             
                             total_scene_cost = plan_cost + prompt_cost
                             total_scene_tokens = plan_tokens + prompt_tokens
+                            
+                            # Track scene-level cost for UI counter
+                            scene.generation_cost = total_scene_cost
+                            
                             logger.info(f"      🎥 Cinematographer: {visual_prompt.composition.camera.shot_type}")
                             logger.info(f"      ✅ Scene ready (${total_scene_cost:.6f}, {total_scene_tokens} tokens)")
                             
@@ -201,6 +258,9 @@ class JobProcessor:
                     job.cost.num_images_generated += 1
                     job.cost.total_cost = job.cost.prompt_generation_cost + job.cost.image_generation_cost
                     
+                    # Add image cost to scene's generation cost
+                    scene.generation_cost += cost
+                    
                     logger.info(f"      ✅ Image generated (${cost:.6f}, ~{tokens} tokens)")
                 else:
                     scene.image_status = ImageStatus.FAILED
@@ -231,6 +291,10 @@ class JobProcessor:
                 image_url, cost, tokens = self.image_gen.generate_image(scene.visual_prompt)
                 scene.image_url = image_url
                 scene.image_status = ImageStatus.GENERATED
+                
+                # Track operation cost for UI counter
+                scene.last_operation_cost = cost
+                
                 logger.info(f"✅ Scene image regenerated (${cost:.6f})")
                 
                 # Update job costs if possible
@@ -238,7 +302,7 @@ class JobProcessor:
                 if job:
                     job.cost.image_generation_cost += cost
                     job.cost.image_tokens_used += tokens
-                    job.cost.total_cost = job.cost.prompt_generation_cost + job.cost.image_generation_cost
+                    job.cost.total_cost = job.cost.prompt_generation_cost + job.cost.image_generation_cost + job.cost.video_generation_cost
                     self.store.save_job(job)
             else:
                 raise RuntimeError("Image service not available")
@@ -295,22 +359,28 @@ class JobProcessor:
                 job.cost.prompt_tokens_used += prompt_tokens
                 self.store.save_job(job)
                 
+                # Start tracking operation cost
+                scene.last_operation_cost = prompt_cost
+                
                 logger.info(f"   ✅ Visual prompt updated")
             
             # Generate new image
             if self.image_gen:
                 logger.info(f"   🖼️ Generating new image...")
-                image_url, cost, tokens = self.image_gen.generate_image(scene.visual_prompt)
+                image_url, image_cost, tokens = self.image_gen.generate_image(scene.visual_prompt)
                 scene.image_url = image_url
                 scene.image_status = ImageStatus.GENERATED
                 
                 # Update costs
-                job.cost.image_generation_cost += cost
+                job.cost.image_generation_cost += image_cost
                 job.cost.image_tokens_used += tokens
-                job.cost.total_cost = job.cost.prompt_generation_cost + job.cost.image_generation_cost
+                job.cost.total_cost = job.cost.prompt_generation_cost + job.cost.image_generation_cost + job.cost.video_generation_cost
                 self.store.save_job(job)
                 
-                logger.info(f"✅ Scene regenerated with instruction (${cost:.6f})")
+                # Add image cost to operation cost for UI counter
+                scene.last_operation_cost += image_cost
+                
+                logger.info(f"✅ Scene regenerated with instruction (prompt: ${scene.last_operation_cost - image_cost:.6f}, image: ${image_cost:.6f}, total: ${scene.last_operation_cost:.6f})")
             else:
                 raise RuntimeError("Image service not available")
                 

@@ -1,4 +1,5 @@
 from typing import List, Optional
+import logging
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from app.models import Scene, UpdateSceneRequest, VideoStatus
@@ -6,6 +7,7 @@ from app.storage import store
 from app.services.job_processor import job_processor
 from app.services.video_service import get_video_service
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/scenes", tags=["scenes"])
 
 
@@ -131,7 +133,7 @@ async def animate_scene(
     request: AnimateSceneRequest
 ) -> Scene:
     """
-    🎬 Animate a scene - Convert the generated image into an 8-second video using Veo 3.1
+    🎬 Animate a scene - Convert the generated image into a 6-second video using Veo 3.1
     
     This endpoint starts the video generation process. The video generation is asynchronous
     and can take 11 seconds to 6 minutes to complete.
@@ -175,6 +177,7 @@ async def animate_scene(
         scene.video_status = VideoStatus.PENDING
         scene.video_operation_name = operation_name
         scene.last_error = None
+        scene.last_operation_cost = estimated_cost  # Track estimated cost for UI counter
         store.save_scene(scene)
         
         return scene
@@ -243,15 +246,36 @@ async def check_video_status(scene_id: str) -> Scene:
             scene.video_status = VideoStatus.GENERATED
             scene.video_url = video_url
             scene.last_error = None
+            
+            logger.info(f"✅ Video generated for scene {scene_id[:8]}, size: {len(video_url)} chars")
+            
+            # Update job costs with actual video generation cost
+            job = store.get_job(scene.job_id)
+            if job and scene.last_operation_cost > 0:
+                job.cost.video_generation_cost += scene.last_operation_cost
+                job.cost.num_videos_generated += 1
+                job.cost.total_cost = (
+                    job.cost.prompt_generation_cost +
+                    job.cost.image_generation_cost +
+                    job.cost.video_generation_cost
+                )
+                store.save_job(job)
+                logger.info(f"💰 Job cost updated: ${job.cost.total_cost:.6f}")
         else:
             # Unexpected state
             scene.video_status = VideoStatus.FAILED
             scene.last_error = "Unexpected state - operation done but no video or error"
         
         store.save_scene(scene)
+        logger.info(f"Scene saved, returning response...")
         return scene
         
     except Exception as e:
+        logger.error(f"❌ Error in check_video_status endpoint: {type(e).__name__}")
+        logger.error(f"   Message: {str(e)}")
+        import traceback
+        logger.error(f"   Traceback:\n{traceback.format_exc()}")
+        
         scene.video_status = VideoStatus.FAILED
         scene.last_error = f"Error checking video status: {str(e)}"
         store.save_scene(scene)

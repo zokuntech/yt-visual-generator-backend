@@ -37,13 +37,15 @@ class JobOptions(BaseModel):
 
 class CostBreakdown(BaseModel):
     """Cost tracking for API usage"""
-    prompt_generation_cost: float = 0.0  # OpenAI cost
-    image_generation_cost: float = 0.0   # Gemini cost
+    prompt_generation_cost: float = 0.0  # OpenAI cost (director + cinematographer)
+    image_generation_cost: float = 0.0   # Gemini image cost
+    video_generation_cost: float = 0.0   # Veo video cost
     total_cost: float = 0.0
     prompt_tokens_used: int = 0
     image_tokens_used: int = 0
     num_prompts_generated: int = 0
     num_images_generated: int = 0
+    num_videos_generated: int = 0
 
 
 class Job(BaseModel):

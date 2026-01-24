@@ -1,7 +1,7 @@
 from typing import List
 import logging
 from fastapi import APIRouter, HTTPException, BackgroundTasks
-from app.models import Job, JobOptions, CreateJobRequest, StyleConfig
+from app.models import Job, JobOptions, CreateJobRequest, StyleConfig, CostBreakdown
 from app.storage import store
 from app.services.job_processor import job_processor
 
@@ -68,3 +68,29 @@ async def list_jobs() -> List[Job]:
     List all jobs.
     """
     return store.list_jobs()
+
+
+@router.get("/{job_id}/cost", response_model=CostBreakdown)
+async def get_job_cost(job_id: str) -> CostBreakdown:
+    """
+    Get the current cost breakdown for a job.
+    
+    This endpoint is perfect for the UI to poll and update a live cost counter.
+    Returns real-time cost information including:
+    - Total cost
+    - Breakdown by prompt generation, image generation, and video generation
+    - Number of items generated
+    - Token usage
+    
+    Example UI implementation:
+    ```javascript
+    // Poll every 2-3 seconds while job is processing
+    const response = await fetch(`/jobs/${jobId}/cost`);
+    const cost = await response.json();
+    displayCostCounter(cost.total_cost); // Show: "$0.0234"
+    ```
+    """
+    job = store.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job.cost

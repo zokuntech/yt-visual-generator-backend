@@ -13,12 +13,12 @@ logger = logging.getLogger(__name__)
 # https://ai.google.dev/pricing
 VEO_PRICING = {
     "veo-3.1-generate-preview": {
-        "per_second": 0.025,  # $0.025 per second (8 seconds = $0.20)
-        "duration": 8  # seconds
+        "per_second": 0.025,  # $0.025 per second (6 seconds = $0.15)
+        "duration": 6  # seconds
     },
     "veo-3.1-fast-generate-preview": {
-        "per_second": 0.015,  # $0.015 per second (8 seconds = $0.12)
-        "duration": 8  # seconds
+        "per_second": 0.015,  # $0.015 per second (6 seconds = $0.09)
+        "duration": 6  # seconds
     }
 }
 
@@ -83,14 +83,14 @@ class VideoService:
             
             # Generate video using Veo 3.1 with Image object
             # https://ai.google.dev/gemini-api/docs/video#generate-from-images
+            # Note: duration is NOT configurable for image-to-video (auto-determined by model)
             operation = self.client.models.generate_videos(
                 model=self.model_name,
                 prompt=prompt,
                 image=image_obj,  # Pass proper Image object
                 config={
                     "aspectRatio": aspect_ratio,
-                    # Can add more config options here:
-                    # "duration": 8,  # seconds (default is 8)
+                    # Note: duration is auto-determined for image-to-video (typically 6-8 seconds)
                     # "resolution": "720p",  # or "1080p", "4k"
                 }
             )

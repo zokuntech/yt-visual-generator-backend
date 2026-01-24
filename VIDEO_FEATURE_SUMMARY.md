@@ -2,7 +2,7 @@
 
 ## What Was Added
 
-Your backend now supports **animating scene images into 8-second videos** using Google Veo 3.1!
+Your backend now supports **animating scene images into 6-second videos** using Google Veo 3.1!
 
 ## New Files
 
@@ -68,7 +68,7 @@ GET /scenes/{scene_id}/video-status
 
 - ✅ **Aspect Ratios**: 16:9 (landscape) or 9:16 (portrait)
 - ✅ **Custom Prompts**: Override scene text for video generation
-- ✅ **8-Second Videos**: 720p, 24fps, MP4 format
+- ✅ **6-Second Videos**: 720p, 24fps, MP4 format
 - ✅ **Async Processing**: Poll for status updates
 - ✅ **Cost Tracking**: Automatically calculated (~$0.12 per video)
 - ✅ **Error Handling**: Comprehensive error messages
@@ -116,7 +116,7 @@ See **`VIDEO_ANIMATION_GUIDE.md`** for:
 
 ## Cost Information
 
-- **Veo 3.1 Fast**: ~$0.12 per 8-second video (default)
+- **Veo 3.1 Fast**: ~$0.09 per 6-second video (default)
 - **Veo 3.1 Regular**: ~$0.20 per video (higher quality)
 - Videos stored for 2 days on Google's servers
 - All videos include SynthID watermark

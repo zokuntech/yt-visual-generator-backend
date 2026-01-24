@@ -1,403 +1,182 @@
-# 💰 Cost Tracking Guide
+# 💰 Cost Tracking - Live Cost Counter for UI
 
 ## Overview
 
-The API now automatically tracks **all costs** for:
-- OpenAI GPT prompt generation
-- Google Gemini image generation
-
-Every job includes detailed cost breakdown!
+Every operation (scene generation, image editing, video animation) now returns **real-time cost information** that you can use to display a live cost counter in the UI.
 
 ---
 
-## 📊 What's Tracked
+## 🎯 What's Available
 
-### Per Job
+### 1. Scene-Level Costs
 
-Each job tracks:
+Every `Scene` object now includes:
+- `generation_cost`: Cost to initially generate this scene (director + cinematographer + image)
+- `last_operation_cost`: Cost of the most recent operation (regeneration, edit, or video)
+
+### 2. Job-Level Costs
+
+The `GET /jobs/{job_id}` endpoint returns the full job with a `cost` breakdown:
 
 ```json
 {
-  "id": "job-123",
+  "id": "job_123",
   "status": "completed",
   "cost": {
-    "prompt_generation_cost": 0.00045,    // OpenAI cost
-    "image_generation_cost": 0.00576,      // Gemini cost
-    "total_cost": 0.00621,                 // Combined
-    "prompt_tokens_used": 3542,            // GPT tokens
-    "image_tokens_used": 23220,            // Gemini tokens (approx)
-    "num_prompts_generated": 18,           // Scenes processed
-    "num_images_generated": 18             // Images created
+    "total_cost": 0.0456,
+    "prompt_generation_cost": 0.0012,
+    "image_generation_cost": 0.0234,
+    "video_generation_cost": 0.0210,
+    "num_prompts_generated": 10,
+    "num_images_generated": 10,
+    "num_videos_generated": 3,
+    "prompt_tokens_used": 8543,
+    "image_tokens_used": 1200
   }
 }
 ```
 
-### Live Tracking
+### 3. Real-Time Cost Endpoint
 
-Costs update in real-time as the job processes!
+**NEW:** `GET /jobs/{job_id}/cost` - Get just the cost breakdown (perfect for polling)
+
+```javascript
+const response = await fetch(`/jobs/${jobId}/cost`);
+const cost = await response.json();
+// Returns just the CostBreakdown object
+```
 
 ---
 
-## 🎯 How to Check Costs
+## 🛠️ UI Implementation Examples
 
-### Option 1: Get Job Details
+### Example 1: Live Counter During Job Processing
 
-```bash
-curl http://localhost:8000/jobs/{job_id}
-```
+```javascript
+function JobCostCounter({ jobId }) {
+  const [cost, setCost] = useState({ total_cost: 0 });
+  const [isProcessing, setIsProcessing] = useState(true);
 
-**Response:**
-```json
-{
-  "id": "abc-123",
-  "status": "completed",
-  "cost": {
-    "total_cost": 0.00621,
-    "prompt_generation_cost": 0.00045,
-    "image_generation_cost": 0.00576,
-    "prompt_tokens_used": 3542,
-    "image_tokens_used": 23220,
-    "num_prompts_generated": 18,
-    "num_images_generated": 18
-  },
-  ...
+  useEffect(() => {
+    const pollCost = setInterval(async () => {
+      const response = await fetch(`/jobs/${jobId}/cost`);
+      const data = await response.json();
+      setCost(data);
+      
+      // Check if job is done
+      const jobResponse = await fetch(`/jobs/${jobId}`);
+      const job = await jobResponse.json();
+      if (job.status === 'completed' || job.status === 'failed') {
+        setIsProcessing(false);
+        clearInterval(pollCost);
+      }
+    }, 2000); // Poll every 2 seconds
+
+    return () => clearInterval(pollCost);
+  }, [jobId]);
+
+  return (
+    <div className="cost-counter">
+      <span>Total Cost:</span>
+      <span className="amount">${cost.total_cost.toFixed(4)}</span>
+      {isProcessing && <span className="loading">⏳</span>}
+    </div>
+  );
 }
 ```
 
-### Option 2: Check Logs
-
-When a job completes, the server logs:
-
-```
-✅ Job completed successfully: abc-123
-💰 Total cost: $0.0062
-   - Prompts: $0.0004 (3542 tokens)
-   - Images: $0.0058 (18 images)
-```
-
-### Option 3: List All Jobs
-
-```bash
-curl http://localhost:8000/jobs
-```
-
-See costs for all jobs!
-
----
-
-## 💵 Pricing Breakdown
-
-### OpenAI (GPT-4o-mini)
-
-**Current Model:** `gpt-4o-mini`
-
-| Token Type | Cost |
-|------------|------|
-| Input | $0.150 / 1M tokens |
-| Output | $0.600 / 1M tokens |
-
-**Typical Scene:**
-- ~150 input tokens (system + user prompt)
-- ~200 output tokens (JSON visual prompt)
-- **Cost per scene: ~$0.00015**
-
-**Example:** 20 scenes = **$0.003** for prompts
-
-### Google Gemini (Nano Banana)
-
-**Current Model:** `gemini-2.5-flash-image`
-
-| Model | Cost per Image |
-|-------|----------------|
-| Flash Image | $0.00032 |
-| Pro Image 1K/2K | $0.00028 |
-| Pro Image 4K | $0.00050 |
-
-**Example:** 20 images = **$0.0064**
-
----
-
-## 📈 Cost Estimation
-
-### By Script Length
-
-| Script Length | Est. Scenes | Prompt Cost | Image Cost | Total |
-|--------------|-------------|-------------|------------|-------|
-| Short (100 words) | ~5 scenes | $0.0008 | $0.0016 | **$0.0024** |
-| Medium (300 words) | ~15 scenes | $0.0023 | $0.0048 | **$0.0071** |
-| Long (500 words) | ~25 scenes | $0.0038 | $0.0080 | **$0.0118** |
-| Very Long (1000 words) | ~50 scenes | $0.0075 | $0.0160 | **$0.0235** |
-
-### Quick Formula
-
-```
-Estimated Cost = (num_scenes × $0.00015) + (num_images × $0.00032)
-```
-
-For most videos: **~$0.0005 per scene**
-
----
-
-## 🎬 Real-World Examples
-
-### Example 1: 60-Second Video
-
-```
-Script: 150 words
-Scenes: 10
-Prompts: $0.0015
-Images: $0.0032
-Total: $0.0047
-```
-
-**Monthly (30 videos):** ~$0.14
-
-### Example 2: 3-Minute Video
-
-```
-Script: 450 words
-Scenes: 30
-Prompts: $0.0045
-Images: $0.0096
-Total: $0.0141
-```
-
-**Monthly (30 videos):** ~$0.42
-
-### Example 3: 10-Minute Video
-
-```
-Script: 1500 words
-Scenes: 100
-Prompts: $0.0150
-Images: $0.0320
-Total: $0.0470
-```
-
-**Monthly (30 videos):** ~$1.41
-
----
-
-## 💡 Cost Optimization Tips
-
-### 1. Batch Processing
-
-Process multiple scripts in one session:
-```bash
-# More efficient than generating one at a time
-for script in script1.txt script2.txt script3.txt; do
-  curl -X POST http://localhost:8000/jobs \
-    -H "Content-Type: application/json" \
-    -d "{\"script_text\": \"$(cat $script)\"}"
-done
-```
-
-### 2. Disable Images for Drafts
-
-Test your script without images first:
-
-```json
-{
-  "script_text": "Your script...",
-  "generate_images": false  // ← Save money on drafts!
-}
-```
-
-Cost: **$0.0015** vs **$0.0047** (70% savings!)
-
-### 3. Reuse Prompts
-
-If you're happy with the visual prompts, regenerate only failed images:
-
-```bash
-POST /scenes/{scene_id}/regenerate-image
-```
-
-Cost: **$0.00032** per image only (no prompt cost!)
-
-### 4. Shorter Sentences
-
-Break long paragraphs into clear sentences:
-- ❌ "And then I realized that the most important thing in life is not about what you achieve but rather how you treat the people around you and the impact you make on their lives."
-- ✅ "I realized something important. It's not about what you achieve. It's about how you treat people."
-
-**Result:** Better visuals, lower cost (1 scene vs 3 scenes)
-
----
-
-## 📊 Monitoring Costs
-
-### Track Your Monthly Usage
-
-Create a simple tracking script:
-
-```python
-import requests
-import json
-
-# Get all jobs
-response = requests.get('http://localhost:8000/jobs')
-jobs = response.json()
-
-# Calculate totals
-total_cost = sum(job['cost']['total_cost'] for job in jobs)
-total_prompts = sum(job['cost']['num_prompts_generated'] for job in jobs)
-total_images = sum(job['cost']['num_images_generated'] for job in jobs)
-
-print(f"📊 Usage Summary")
-print(f"Total Jobs: {len(jobs)}")
-print(f"Total Scenes: {total_prompts}")
-print(f"Total Images: {total_images}")
-print(f"💰 Total Cost: ${total_cost:.4f}")
-print(f"📈 Average per Job: ${total_cost/len(jobs):.4f}")
-```
-
-### Set Budgets
-
-Create alerts when costs exceed limits:
-
-```python
-def check_budget(job_id):
-    response = requests.get(f'http://localhost:8000/jobs/{job_id}')
-    job = response.json()
-    
-    if job['cost']['total_cost'] > 0.05:  # $0.05 limit
-        print(f"⚠️ Warning: Job {job_id} cost ${job['cost']['total_cost']:.4f}")
-        print(f"   Scenes: {job['cost']['num_prompts_generated']}")
-        return False
-    return True
-```
-
----
-
-## 🔍 Understanding the Breakdown
-
-### Prompt Generation (OpenAI)
-
-**What you're paying for:**
-- System prompt (tells GPT how to format output)
-- User prompt (your script sentence)
-- JSON response (structured visual description)
-
-**Typical tokens:**
-- Input: ~150 tokens
-- Output: ~200 tokens
-- Total: ~350 tokens = **$0.00015**
-
-### Image Generation (Gemini)
-
-**What you're paying for:**
-- Text-to-image generation
-- 1024x1024 resolution (Flash model)
-- SynthID watermark embedding
-- C2PA metadata
-
-**Cost:** ~1290 tokens = **$0.00032 per image**
-
----
-
-## 💳 Free Tier Limits
-
-### OpenAI
-
-- **Free trial:** $5 credit
-- **Limits:** Varies by account
-- **Rate limits:** 3 requests/min (free tier)
-
-**Your $5 gets you:** ~10,000 scenes!
-
-### Google Gemini
-
-- **Free tier:** 15 requests per minute
-- **Daily limit:** 1500 requests
-- **Monthly:** 1M tokens free
-
-**Your free tier gets you:** ~775 images per day!
-
----
-
-## 📈 Scaling Costs
-
-### Small Creator (5 videos/week)
-
-```
-5 videos × 15 scenes each = 75 scenes/week
-Cost per week: ~$0.04
-Cost per month: ~$0.16
-Cost per year: ~$1.92
-```
-
-### Medium Creator (1 video/day)
-
-```
-30 videos × 20 scenes each = 600 scenes/month
-Cost per month: ~$0.30
-Cost per year: ~$3.60
-```
-
-### Large Creator (3 videos/day)
-
-```
-90 videos × 25 scenes each = 2,250 scenes/month
-Cost per month: ~$1.13
-Cost per year: ~$13.56
-```
-
-**Bottom line:** Even at scale, costs are minimal! 🎉
-
----
-
-## 🚨 Cost Alerts
-
-The API logs costs automatically. Watch for:
-
-```
-✅ Job completed successfully: abc-123
-💰 Total cost: $0.0062
-```
-
-If costs seem high:
-1. Check number of scenes
-2. Verify script length
-3. Look for very long sentences
-4. Consider breaking into shorter sentences
-
----
-
-## 🔄 Cost for Regenerations
-
-When you regenerate an image:
-
-```bash
-POST /scenes/{scene_id}/regenerate-image
-```
-
-**Cost added:**
-- Prompt: **$0** (reuses existing)
-- Image: **$0.00032** (generates new)
-
-**Total:** Only pay for the new image!
-
----
-
-## 📱 Display Costs in UI
-
-Show users what they're spending:
-
-```jsx
-function JobCostDisplay({ job }) {
-  const cost = job.cost;
+### Example 2: Show Cost After Each Operation
+
+```javascript
+// After regenerating an image
+const regenerateScene = async (sceneId) => {
+  const response = await fetch(`/scenes/${sceneId}/regenerate-image`, {
+    method: 'POST'
+  });
+  const scene = await response.json();
   
+  // Show the cost of this operation
+  showToast(`Image regenerated! Cost: $${scene.last_operation_cost.toFixed(4)}`);
+  
+  // Update total job cost
+  updateJobCost(scene.job_id);
+};
+
+// After editing with instruction
+const editScene = async (sceneId, instruction) => {
+  const response = await fetch(`/scenes/${sceneId}/regenerate-with-instruction`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ instruction })
+  });
+  const scene = await response.json();
+  
+  // This includes both cinematographer + image cost
+  showToast(`Scene edited! Cost: $${scene.last_operation_cost.toFixed(4)}`);
+  updateJobCost(scene.job_id);
+};
+
+// After animating to video
+const animateScene = async (sceneId) => {
+  const response = await fetch(`/scenes/${sceneId}/animate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ aspect_ratio: '16:9' })
+  });
+  const scene = await response.json();
+  
+  // Show estimated cost immediately
+  showToast(`Video generation started! Estimated: $${scene.last_operation_cost.toFixed(4)}`);
+  
+  // Poll for completion, then update total
+  pollVideoStatus(sceneId);
+};
+```
+
+### Example 3: Detailed Cost Breakdown Display
+
+```javascript
+function CostBreakdown({ jobId }) {
+  const [cost, setCost] = useState(null);
+
+  useEffect(() => {
+    fetch(`/jobs/${jobId}/cost`)
+      .then(r => r.json())
+      .then(setCost);
+  }, [jobId]);
+
+  if (!cost) return <div>Loading...</div>;
+
   return (
     <div className="cost-breakdown">
-      <h3>Cost: ${cost.total_cost.toFixed(4)}</h3>
-      <ul>
-        <li>Prompts: ${cost.prompt_generation_cost.toFixed(4)} 
-            ({cost.num_prompts_generated} scenes)</li>
-        <li>Images: ${cost.image_generation_cost.toFixed(4)} 
-            ({cost.num_images_generated} images)</li>
-      </ul>
-      <p>Tokens: {cost.prompt_tokens_used + cost.image_tokens_used} total</p>
+      <h3>Cost Breakdown</h3>
+      <table>
+        <tbody>
+          <tr>
+            <td>Scene Planning (GPT):</td>
+            <td>${cost.prompt_generation_cost.toFixed(6)}</td>
+            <td>({cost.num_prompts_generated} scenes)</td>
+          </tr>
+          <tr>
+            <td>Image Generation (Gemini):</td>
+            <td>${cost.image_generation_cost.toFixed(6)}</td>
+            <td>({cost.num_images_generated} images)</td>
+          </tr>
+          <tr>
+            <td>Video Animation (Veo):</td>
+            <td>${cost.video_generation_cost.toFixed(6)}</td>
+            <td>({cost.num_videos_generated} videos)</td>
+          </tr>
+          <tr className="total">
+            <td><strong>Total:</strong></td>
+            <td><strong>${cost.total_cost.toFixed(6)}</strong></td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+      <div className="tokens-used">
+        <small>Tokens Used: {cost.prompt_tokens_used.toLocaleString()}</small>
+      </div>
     </div>
   );
 }
@@ -405,28 +184,100 @@ function JobCostDisplay({ job }) {
 
 ---
 
-## 🎯 Key Takeaways
+## 📊 Cost Tracking Flow
 
-1. **Costs are automatic** - No manual tracking needed
-2. **Very affordable** - ~$0.0005 per scene
-3. **Transparent** - Full breakdown in every job
-4. **Optimizable** - Disable images for drafts
-5. **Scalable** - Costs stay low even at high volume
+### Initial Job Creation
+1. User submits script → `POST /jobs`
+2. Backend processes scenes in background
+3. Each scene gets `generation_cost` set (director + cinematographer + image)
+4. Job's `cost.total_cost` updates in real-time
+
+### Image Regeneration
+1. User clicks "Regenerate" → `POST /scenes/{id}/regenerate-image`
+2. Response includes `scene.last_operation_cost` (just image cost)
+3. Job's `cost.image_generation_cost` increases
+
+### Scene Editing with Instruction
+1. User types "make her smile" → `POST /scenes/{id}/regenerate-with-instruction`
+2. Response includes `scene.last_operation_cost` (cinematographer + image cost)
+3. Job's costs update accordingly
+
+### Video Animation
+1. User clicks "Animate" → `POST /scenes/{id}/animate`
+2. Response includes `scene.last_operation_cost` (estimated video cost: ~$0.09)
+3. Poll `GET /scenes/{id}/video-status` until done
+4. When `video_status = "generated"`, job's `cost.video_generation_cost` increases
 
 ---
 
-## 📞 Need Help?
+## 🎨 UI Design Suggestions
 
-- Check job costs: `GET /jobs/{job_id}`
-- View all jobs: `GET /jobs`
-- Check logs for cost breakdown
-- Use test scripts to estimate costs
+### Floating Cost Counter
+```jsx
+<div className="floating-cost-counter">
+  💰 ${totalCost.toFixed(4)}
+</div>
+```
+
+### Per-Scene Cost Display
+```jsx
+<div className="scene-card">
+  <img src={scene.image_url} />
+  <div className="scene-cost">
+    <small>Generation: ${scene.generation_cost.toFixed(6)}</small>
+    {scene.last_operation_cost > 0 && (
+      <small>Last edit: ${scene.last_operation_cost.toFixed(6)}</small>
+    )}
+  </div>
+</div>
+```
+
+### Budget Warning
+```jsx
+{cost.total_cost > 1.00 && (
+  <div className="budget-warning">
+    ⚠️ Cost exceeds $1.00! Consider reducing edits.
+  </div>
+)}
+```
 
 ---
 
-**Remember:** These are estimated costs based on current API pricing. Always check official pricing pages for the most up-to-date information!
+## 💡 Typical Costs
 
-- [OpenAI Pricing](https://openai.com/api/pricing/)
-- [Google Gemini Pricing](https://ai.google.dev/pricing)
+| Operation | Cost | Notes |
+|-----------|------|-------|
+| Scene generation | ~$0.00015 | Director + Cinematographer (GPT-4o-mini) |
+| Image generation | ~$0.002 | Gemini image generation |
+| Image regeneration | ~$0.002 | Just image, no prompt update |
+| Scene edit (text) | ~$0.00215 | Cinematographer + new image |
+| Video animation | ~$0.09 | Veo 3.1 Fast, 6 seconds |
 
-Happy creating! 💰🚀
+**Example:** A 10-scene video (all animated) = ~$0.02 (scenes) + $0.02 (images) + $0.90 (videos) = **~$0.94 total**
+
+---
+
+## 🚀 Quick Start
+
+```javascript
+// Simple cost tracker component
+import { useState, useEffect } from 'react';
+
+export function CostTracker({ jobId }) {
+  const [cost, setCost] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const res = await fetch(`/jobs/${jobId}/cost`);
+      const data = await res.json();
+      setCost(data.total_cost);
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [jobId]);
+
+  return <div>Cost: ${cost.toFixed(4)}</div>;
+}
+```
+
+That's it! 🎉
