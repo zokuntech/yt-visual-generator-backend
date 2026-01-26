@@ -60,8 +60,13 @@ class VideoService:
             if not scene.image_url:
                 raise ValueError(f"Scene {scene.id} has no generated image")
             
-            # Use custom prompt or scene text
-            prompt = custom_prompt if custom_prompt else scene.sentence_text
+            # Build cinematic prompt following Google's Veo recommendations
+            # https://ai.google.dev/gemini-api/docs/video?example=dialogue#basics
+            if custom_prompt:
+                prompt = custom_prompt
+            else:
+                # Enhance scene text with visual description for better Veo results
+                prompt = self._build_cinematic_prompt(scene)
             
             logger.info(f"🎬 Starting Veo 3.1 video generation for scene {scene.id[:8]}...")
             logger.info(f"   Model: {self.model_name}")
@@ -112,6 +117,70 @@ class VideoService:
             import traceback
             logger.error(f"   Traceback:\n{traceback.format_exc()}")
             raise RuntimeError(f"Video generation failed: {str(e)}")
+    
+    def _build_cinematic_prompt(self, scene: Scene) -> str:
+        """
+        Build a detailed, cinematic prompt for Veo following Google's recommendations.
+        
+        According to Veo docs, prompts should be:
+        - Descriptive and detailed
+        - Include camera movements and visual style
+        - Describe the action and atmosphere
+        
+        Example from Google:
+        "A close up of two people staring at a cryptic drawing on a wall, torchlight flickering.
+        A man murmurs, 'This must be it. That's the secret code.'"
+        """
+        # Start with scene text
+        base_text = scene.sentence_text
+        
+        # Add visual context from visual prompt if available
+        if scene.visual_prompt and scene.visual_prompt.composition:
+            vp = scene.visual_prompt
+            camera = vp.composition.camera
+            setting = vp.setting  # This is a string, not an object
+            main_char = vp.characters[0] if vp.characters and len(vp.characters) > 0 else None
+            
+            # Build descriptive prompt
+            details = []
+            
+            # Camera shot type
+            if camera:
+                shot_descriptions = {
+                    "close_up": "A close up",
+                    "extreme_close_up": "An extreme close up",
+                    "medium_shot": "A medium shot",
+                    "wide_shot": "A wide shot",
+                    "full_shot": "A full body shot",
+                }
+                shot_desc = shot_descriptions.get(camera.shot_type, "A view")
+                details.append(shot_desc)
+            
+            # Character and activity
+            if main_char and main_char.pose:
+                details.append(f"of someone {main_char.pose.stance}")
+                if main_char.pose.hand_position and main_char.pose.hand_position != "at_sides":
+                    details.append(f", {main_char.pose.hand_position}")
+            
+            # Setting (it's a string description)
+            if setting:
+                details.append(f"in {setting}")
+            
+            # Combine into cinematic prompt
+            if details:
+                visual_desc = " ".join(details)
+                # Format: "Visual description. [Scene text]"
+                prompt = f"{visual_desc}. {base_text}"
+            else:
+                prompt = base_text
+        else:
+            prompt = base_text
+        
+        # Keep it concise but descriptive (Veo has 1024 token limit)
+        if len(prompt) > 500:
+            prompt = prompt[:500]
+        
+        return prompt
     
     def check_video_status(self, operation_name: str) -> Tuple[bool, Optional[str], Optional[str]]:
         """

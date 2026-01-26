@@ -142,17 +142,46 @@ RESPOND WITH THIS EXACT JSON STRUCTURE:
   
   "characters": [
     {{
-      "role": "Choose: main_character | friend | stranger | group_of_people | passerby | family_member | colleague | crowd | other_person | background_people",
-      "presence": "Choose: primary | background | mentioned | multiple",
-      "interaction": "Choose: isolated | engaging_in_conversation | laughing_together | working_side_by_side | walking_past | sitting_nearby | making_eye_contact | ignoring_each_other | in_motion | gesturing | collaborating | debating | observing"
+      "role": "Choose: main_character | friend | stranger | group_of_people | passerby | NO_CHARACTER (b-roll shot, no people visible)",
+      "presence": "Choose: primary | background | multiple | NONE (pure b-roll/environmental shot)",
+      "interaction": "Choose: isolated | engaging_in_conversation | laughing_together | working_side_by_side | walking_past | sitting_nearby | making_eye_contact | ignoring_each_other | in_motion | gesturing | collaborating | debating | observing | NOT_APPLICABLE (no people in shot)",
+      "activity": "🔥 WHAT IS THE CHARACTER DOING? Be SPECIFIC and VARIED:
+      
+      💪 ACTIVE POSES:
+      - stretching | exercising | running | walking | dancing | jumping | climbing | reaching_up | bending_down | kneeling | crouching | leaning_against | lying_down | sitting_cross_legged | standing_on_tiptoes
+      
+      🖐️ HAND GESTURES & ACTIONS:
+      - typing | writing | drawing | painting | pointing | waving | covering_face | holding_phone | scrolling | texting | taking_photo | holding_coffee | eating | drinking | cooking | cleaning | organizing | fixing_something | building | creating
+      
+      😊 FACIAL EXPRESSIONS & HEAD:
+      - looking_up | looking_down | looking_away | staring_intently | eyes_closed | smiling | laughing | thinking_hand_on_chin | tilting_head | nodding | shaking_head | looking_over_shoulder
+      
+      🎭 EMOTIONAL BODY LANGUAGE:
+      - arms_crossed | hands_in_pockets | fidgeting | pacing | sitting_hunched | sitting_upright | leaning_forward | leaning_back | sprawled_out | curled_up | tense_posture | relaxed_posture | confident_stance | defensive_posture
+      
+      🎨 CREATIVE ACTIVITIES:
+      - sketching | photographing | filming | recording | playing_instrument | singing | crafting | sculpting | knitting | sewing | reading | studying | researching | experimenting
+      
+      🏃 MOVEMENT & MOTION:
+      - walking_purposefully | strolling_casually | jogging | sprinting | skipping | spinning | turning | entering | exiting | approaching | retreating | climbing_stairs | descending_stairs
+      
+      ⚡ PICK ACTIVITIES THAT MATCH THE EMOTION! Examples:
+      - Anxious → pacing, fidgeting, hands_in_hair, looking_around
+      - Determined → focused_typing, purposeful_walking, leaning_forward
+      - Contemplative → staring_out_window, hand_on_chin, looking_up
+      - Excited → jumping, arms_raised, dancing, animated_gestures
+      - Exhausted → slouched, head_in_hands, lying_down, eyes_closed
+      - Curious → leaning_in, reaching_out, examining_object, tilting_head"
     }}
     
-    ⚠️ ADD 2-3 CHARACTERS when it makes sense! Don't always use just one person.
-    Examples:
-    - Main character + friend having coffee
-    - Main character + stranger on train
-    - Main character + group in background
-    - Main character surrounded by people
+    ⚠️ VARY YOUR PEOPLE STRATEGY - CHARACTER DOESN'T HAVE TO BE IN EVERY SCENE!:
+    - 60% of scenes: B-ROLL (NO character visible - just objects, environments, details)
+    - 40% character visible:
+      * Sometimes: Character completely alone
+      * Sometimes: Character + 1-2 specific people  
+    - Sometimes: Character in crowd/background people (1/3 of scenes)
+    
+    DON'T put "background people" in EVERY scene! Mix it up!
   ],
   
   "props": [
@@ -202,22 +231,52 @@ RESPOND WITH THIS EXACT JSON STRUCTURE:
     "angle": "Choose DYNAMIC angles: eye_level | low_angle | high_angle | slightly_low | slightly_high | ground_level | overhead | canted | tilted | dutch",
     "framing": "Choose INTERESTING framing: centered | rule_of_thirds | off_center | dynamic | leading_lines | frame_within_frame | negative_space | symmetrical | asymmetrical | foreground_interest | depth_layers"
   }},
-  "motion": "Choose: still | subtle_head_turn | walking | sitting_down | standing_up | reaching | looking_around | gesture | running | dancing | working | writing | typing | scrolling | laughing | talking | thinking | stretching",
+  "motion": "🎬 PICK A SPECIFIC ACTION! Don't just say 'still':
+  
+  Choose from: typing_intensely | scrolling_phone | writing_notes | sketching | reading_book | sipping_coffee | eating | cooking | cleaning | organizing | exercising | stretching | yoga_pose | running | walking_purposefully | sitting_down | standing_up | leaning_against_wall | looking_out_window | staring_at_screen | gesturing_while_talking | laughing | crying | sighing | thinking_deeply | hand_on_chin | covering_face | rubbing_eyes | stretching_arms | cracking_knuckles | fidgeting | pacing | dancing | jumping | reaching_up | bending_down | turning_around | looking_over_shoulder | tilting_head | nodding | shaking_head | waving | pointing | taking_photo | playing_instrument | painting | drawing | building | fixing_something | playing_with_object | tying_shoes | putting_on_jacket | adjusting_clothes | checking_watch | looking_at_phone | putting_down_phone | picking_up_item | setting_down_item",
+  
   "variation_from_previous": true
 }}
 
 🔥 MANDATORY CREATIVITY RULES (FOLLOW THESE OR FAIL):
 
-1. **ADD PEOPLE! SCENES WITH OTHERS ARE MORE INTERESTING!**
-   - ❌ DON'T: Always show main character alone
-   - ✅ DO: Add friends, strangers, crowds, groups
+1. **WHAT IS THE CHARACTER DOING? BE SPECIFIC!**
+   - ❌ DON'T: Just say "still" or generic "sitting"
+   - ✅ DO: Describe SPECIFIC actions, poses, and body language
    - Examples:
-     * "I felt lost" → Character alone in crowded subway (isolation in crowd)
-     * "I learned something" → Character with friend in coffee shop (conversation)
-     * "I was happy" → Character at party with background people (celebration)
-     * "I walked home" → Character on street with passersby (urban life)
+     * "I felt overwhelmed" → Character hunched over desk, head in hands, surrounded by papers
+     * "I had an idea" → Character leaning back, eyes lighting up, hand reaching for pen
+     * "I was tired" → Character slouched on couch, eyes half-closed, coffee cup slipping
+     * "I felt free" → Character arms spread wide, spinning, head thrown back laughing
+     * "I worked late" → Character typing intensely, leaning into screen, coffee nearby
+     * "I called my friend" → Character pacing, gesturing while talking on phone
+   
+   🎯 MATCH POSE TO EMOTION:
+   - Anxious → fidgeting, pacing, hands in hair
+   - Confident → upright posture, purposeful movements, direct gaze
+   - Sad → hunched, looking down, slow movements
+   - Excited → animated gestures, bouncing, leaning forward
+   - Contemplative → hand on chin, looking up/away, still
+   - Exhausted → slouched, head back, eyes closed
 
-2. **ADD MULTIPLE PROPS! MAKE SCENES RICH!**
+2. **CHARACTER DOESN'T NEED TO BE IN EVERY SCENE! USE B-ROLL!**
+   - ❌ DON'T: Force the character into every single scene
+   - ✅ DO: Mix character shots with creative b-roll
+   - Rule: ~40% character visible, ~60% b-roll/environmental shots
+   - 
+   - 🎬 B-ROLL IDEAS (NO CHARACTER VISIBLE):
+     * Objects: Close-up of phone screen, coffee steaming, keyboard typing, book pages turning
+     * Environment: Empty street at dawn, rain on window, city skyline, nature shots
+     * Details: Hands typing (no face), feet walking, door opening, light switching
+     * Atmospheric: Shadows, reflections, textures, weather, time passing
+     * Symbolic: Clock ticking, calendar pages, sunset, sunrise, seasons changing
+   - 
+   - 👤 WHEN CHARACTER IS VISIBLE, VARY CONTEXT:
+     * Sometimes alone: Character in empty space, isolated, contemplative
+     * Sometimes with specific people: Friend, colleague, stranger interaction
+     * Sometimes in crowds: Busy street, party, public space
+
+3. **ADD MULTIPLE PROPS! MAKE SCENES RICH!**
    - ❌ DON'T: Empty scenes with no objects
    - ✅ DO: 2-4 props per scene minimum
    - Examples:
@@ -226,20 +285,20 @@ RESPOND WITH THIS EXACT JSON STRUCTURE:
      * Reading → book + coffee + blanket + window
      * Commuting → headphones + phone + bag + transit_pass
 
-3. **LOCATION VARIETY IS NON-NEGOTIABLE**
+4. **LOCATION VARIETY IS NON-NEGOTIABLE**
    - ❌ DON'T: Repeat locations within 5 scenes
    - ✅ DO: Jump between locations frequently
    - Flow example for a 10-scene story:
      1. Bedroom_morning → 2. Kitchen_coffee → 3. Car_commute → 4. Office_desk → 5. Coffee_shop_meeting → 
      6. Park_walking → 7. Gym_workout → 8. Restaurant_dinner → 9. Street_night → 10. Bedroom_evening
 
-4. **CAMERA ANGLES MUST BE DYNAMIC**
+5. **CAMERA ANGLES MUST BE DYNAMIC**
    - ❌ DON'T: Use medium_shot + eye_level for everything
    - ✅ DO: Mix it up aggressively
    - Sequence example:
      Wide_shot → Close_up → Over_shoulder → Birds_eye → Medium_shot → Low_angle → Dutch_angle → Profile
 
-5. **MATCH VISUAL STYLE TO EMOTION** (be specific!)
+6. **MATCH VISUAL STYLE TO EMOTION** (be specific!)
    - Isolated/lonely → Empty space, single character, distant framing, cold colors
    - Anxious → Crowded space, tilted angle, tight framing, people everywhere
    - Hopeful → Bright lighting, open space, windows, upward angle, warm tones
@@ -248,37 +307,39 @@ RESPOND WITH THIS EXACT JSON STRUCTURE:
    - Confused → Clutter, crowd, dutch angle, distracted character, many props
    - Determined → Clear focus, dramatic lighting, purposeful pose, minimal distractions
 
-6. **MAKE EVERY SCENE MEMORABLE**
-   - Think: "What makes THIS scene visually unique?"
+7. **MAKE EVERY SCENE MEMORABLE WITH SPECIFIC ACTIONS**
+   - Think: "What makes THIS scene visually unique? What is the character DOING?"
    - Examples:
      * ❌ Boring: "Character sits at desk"
-     * ✅ Interesting: "Character at messy desk, late night, surrounded by coffee cups and papers, dramatic lamp lighting"
+     * ✅ Interesting: "Character hunched over messy desk, typing intensely, late night, surrounded by coffee cups and papers, dramatic lamp lighting, rubbing tired eyes"
      
      * ❌ Boring: "Character walks outside"
-     * ✅ Interesting: "Character walks through busy street, sunset golden hour, people blur past, holding coffee and phone"
+     * ✅ Interesting: "Character walks purposefully through busy street, sunset golden hour, people blur past, checking phone while holding coffee, determined expression"
      
      * ❌ Boring: "Character looks sad"
-     * ✅ Interesting: "Character alone on bench, autumn leaves falling, empty park, hunched posture, distant gaze"
+     * ✅ Interesting: "Character alone on bench, head in hands, autumn leaves falling around them, empty park, hunched posture, shoulders shaking"
 
-7. **LAYER YOUR VISUALS**
+8. **LAYER YOUR VISUALS**
    - Foreground + Subject + Background = DEPTH
    - Examples:
-     * Coffee shop: Blurred customers in foreground → Character at table → Window with street view in background
-     * Park: Tree branches frame → Character on bench → Playground in background
-     * Office: Monitor glow foreground → Character typing → Window city view background
+     * Coffee shop: Blurred customers in foreground → Character sipping coffee at table → Window with street view in background
+     * Park: Tree branches frame → Character stretching on bench → Playground in background
+     * Office: Monitor glow foreground → Character typing intensely → Window city view background
 
-8. **USE UNEXPECTED COMBINATIONS**
+9. **USE UNEXPECTED COMBINATIONS**
    - Sad moment in bright sunny park (contrast)
    - Happy moment in dimly lit bar (intimate)
    - Anxious moment in peaceful library (internal vs external)
    - Calm moment in busy street (finding peace)
 
 🚨 CRITICAL REMINDERS:
+- ALWAYS describe SPECIFIC character actions/poses (not just "still" or "sitting")
+- VARY people presence: 1/3 alone, 1/3 with specific people, 1/3 in crowds
 - NEVER make 3+ consecutive scenes in the same type of location
 - NEVER use the same camera shot 2 scenes in a row
-- ALWAYS include at least 1-2 props minimum
-- FREQUENTLY add other people (every 2-3 scenes)
-- CONSTANTLY vary camera angles
+- ALWAYS include at least 2-4 props per scene
+- CONSTANTLY vary camera angles and character activities
+- MATCH CHARACTER POSE/ACTION TO EMOTION
 - MAKE SCENES VISUALLY DISTINCT AND MEMORABLE!
 
 🎬 You are a VISIONARY DIRECTOR, not a boring documentarian. THINK BIG! BE BOLD! SURPRISE US!

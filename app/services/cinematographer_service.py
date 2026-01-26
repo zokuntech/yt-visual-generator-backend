@@ -246,8 +246,8 @@ RESPOND WITH THIS EXACT JSON STRUCTURE:
 {{
   "characters": [
     {{
-      "role": "From scene plan",
-      "description": "{global_style.character_description} + specific details from plan",
+      "role": "From scene plan (OR empty array [] if scene plan indicates NO_CHARACTER or NONE presence - for B-ROLL shots)",
+      "description": "{global_style.character_description} + specific details from plan (OMIT if no character)",
       "expression": {{
         "primary": "Match emotional tone from plan",
         "micro_expression": "subtle detail based on emotion",
@@ -260,19 +260,29 @@ RESPOND WITH THIS EXACT JSON STRUCTURE:
       }}
     }}
   ],
-  "props": ["List of prop types from plan"],
-  "setting": "Natural language description combining: setting.environment + symbolic_elements + props",
+  "props": ["List of prop types from plan (REQUIRED even for b-roll - focus on objects in frame)"],
+  "setting": "Natural language description combining: setting.environment + symbolic_elements + props (FOR B-ROLL: focus on environment, objects, details, atmosphere)",
   "composition": {{
     "camera": {{
-      "shot_type": "From camera_intent in plan",
+      "shot_type": "From camera_intent in plan (FOR B-ROLL: often extreme_close_up, macro, detail shots)",
       "angle": "From camera_intent in plan",
-      "movement": "From motion in plan"
+      "movement": "From motion in plan (FOR B-ROLL: can be static, slow_pan, or focus on object movement)"
     }},
-    "framing": "From camera_intent in plan",
+    "framing": "From camera_intent in plan (FOR B-ROLL: emphasize interesting framing, depth, textures)",
     "depth": "Choose: shallow (for close-ups) | normal | deep (for wide shots)",
     "extras": "no_text_no_logos_no_watermarks"
   }}
 }}
+
+🎬 B-ROLL SCENES (When plan shows NO_CHARACTER or presence:NONE):
+- Leave characters array EMPTY: []
+- Focus setting on OBJECTS, ENVIRONMENT, DETAILS, ATMOSPHERE
+- Props become the MAIN SUBJECT (phones, coffee cups, windows, nature)
+- Camera shots often: extreme_close_up, macro, detail, overhead, abstract angles
+- Examples:
+  * "Phone buzzing on table" → characters: [], props: ["smartphone", "coffee_cup"], setting: "close-up of phone screen lighting up on wooden desk"
+  * "Rain on window" → characters: [], props: ["raindrops", "window_glass"], setting: "raindrops streaming down foggy window with blurred city lights beyond"
+  * "Empty street at dawn" → characters: [], props: ["streetlights", "fog"], setting: "quiet urban street with morning mist and golden light"
 
 CRITICAL RULES:
 1. ❗ You MUST use the camera shot from the scene plan - no changes
@@ -319,17 +329,11 @@ Convert this plan into a detailed visual prompt.
         global_style: JobStyleConfig
     ) -> VisualPrompt:
         """Create a basic fallback prompt if cinematographer fails"""
-        return VisualPrompt(
-            scene_id=scene_plan.scene_id,
-            sentence_text=scene_plan.sentence,
-            style=StyleConfig(
-                art_style=global_style.art_style,
-                lighting=global_style.lighting,
-                color_palette=global_style.color_palette,
-                background=global_style.background,
-                aspect_ratio=global_style.aspect_ratio
-            ),
-            characters=[
+        
+        # If the scene plan has no characters (b-roll), don't add a character to fallback
+        characters_list = []
+        if scene_plan.characters:
+            characters_list = [
                 Character(
                     role="main_character",
                     description=global_style.character_description,
@@ -343,7 +347,19 @@ Convert this plan into a detailed visual prompt.
                         stance="standing"
                     )
                 )
-            ],
+            ]
+        
+        return VisualPrompt(
+            scene_id=scene_plan.scene_id,
+            sentence_text=scene_plan.sentence,
+            style=StyleConfig(
+                art_style=global_style.art_style,
+                lighting=global_style.lighting,
+                color_palette=global_style.color_palette,
+                background=global_style.background,
+                aspect_ratio=global_style.aspect_ratio
+            ),
+            characters=characters_list,
             props=[],
             setting=scene_plan.setting.environment,
             composition=Composition(

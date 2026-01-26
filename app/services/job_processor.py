@@ -108,9 +108,9 @@ class JobProcessor:
         current_scene = []
         current_word_count = 0
         
-        TARGET_WORDS_PER_SCENE = 15  # ~6 seconds at 2.5 words/sec
-        MAX_WORDS_PER_SCENE = 25     # Max ~10 seconds
-        MAX_SENTENCES_PER_SCENE = 3  # Don't combine too many sentences
+        TARGET_WORDS_PER_SCENE = 12  # ~5 seconds at 2.5 words/sec (more scenes)
+        MAX_WORDS_PER_SCENE = 20     # Max ~8 seconds
+        MAX_SENTENCES_PER_SCENE = 2  # Don't combine too many sentences
         
         for sentence in raw_sentences:
             word_count = len(sentence.split())

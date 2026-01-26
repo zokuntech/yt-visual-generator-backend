@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict
 import logging
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
@@ -6,6 +6,7 @@ from app.models import Scene, UpdateSceneRequest, VideoStatus
 from app.storage import store
 from app.services.job_processor import job_processor
 from app.services.video_service import get_video_service
+from app.services.edit_assistant_service import edit_assistant_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/scenes", tags=["scenes"])
@@ -20,6 +21,11 @@ class AnimateSceneRequest(BaseModel):
     """Request to animate a scene (convert image to video)"""
     custom_prompt: Optional[str] = None  # Optional: override the scene text
     aspect_ratio: str = "16:9"  # "16:9" (landscape) or "9:16" (portrait)
+
+
+class RefineInstructionRequest(BaseModel):
+    """Request to refine a vague edit instruction"""
+    instruction: str  # e.g. "make it better" or "different vibe"
 
 
 @router.get("/job/{job_id}", response_model=List[Scene])
@@ -279,4 +285,116 @@ async def check_video_status(scene_id: str) -> Scene:
         scene.video_status = VideoStatus.FAILED
         scene.last_error = f"Error checking video status: {str(e)}"
         store.save_scene(scene)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{scene_id}/edit-suggestions", response_model=Dict)
+async def get_edit_suggestions(scene_id: str) -> Dict:
+    """
+    🎨 Get edit suggestions for a scene
+    
+    Analyzes the current scene and returns:
+    - What can be edited (character, setting, props, camera)
+    - Specific suggestions for each category
+    - Example instructions for common edits
+    
+    Perfect for showing users what they can change in the UI!
+    
+    Example response:
+    ```json
+    {
+      "current_state": {
+        "character": { "pose": "sitting", "expression": "neutral" },
+        "setting": { "location": "office", "lighting": "natural" },
+        "camera": { "shot": "medium_shot", "angle": "eye_level" }
+      },
+      "edit_categories": [
+        {
+          "category": "Character Pose & Expression",
+          "suggestions": [
+            {
+              "category": "pose",
+              "description": "Change what the character is doing",
+              "example_instruction": "make the character standing up and stretching"
+            }
+          ]
+        }
+      ]
+    }
+    ```
+    """
+    scene = store.get_scene(scene_id)
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+    
+    if not edit_assistant_service:
+        raise HTTPException(
+            status_code=503,
+            detail="Edit assistant service not available"
+        )
+    
+    try:
+        analysis = edit_assistant_service.analyze_scene_for_edits(scene)
+        return analysis
+    except Exception as e:
+        logger.error(f"❌ Error analyzing scene for edits: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{scene_id}/refine-instruction", response_model=Dict)
+async def refine_edit_instruction(
+    scene_id: str,
+    request: RefineInstructionRequest
+) -> Dict:
+    """
+    ✨ Refine a vague edit instruction into something specific and actionable
+    
+    Takes user input like "make it happier" and transforms it into:
+    "Change character expression to bright smile with relaxed posture, add warm golden hour lighting"
+    
+    Usage:
+    1. User types vague instruction: "make it better"
+    2. Call this endpoint to get refined version
+    3. Show refined version to user (optional)
+    4. Use refined version for actual edit
+    
+    Example:
+    ```
+    POST /scenes/{id}/refine-instruction
+    {
+      "instruction": "make it more energetic"
+    }
+    
+    Response:
+    {
+      "original": "make it more energetic",
+      "refined": "change character to dynamic jumping pose with excited expression, add bright vibrant lighting, create lively bustling atmosphere with movement",
+      "cost": 0.000123
+    }
+    ```
+    """
+    scene = store.get_scene(scene_id)
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+    
+    if not edit_assistant_service:
+        raise HTTPException(
+            status_code=503,
+            detail="Edit assistant service not available"
+        )
+    
+    try:
+        refined, cost, tokens = edit_assistant_service.refine_edit_instruction(
+            scene,
+            request.instruction
+        )
+        
+        return {
+            "original": request.instruction,
+            "refined": refined,
+            "cost": cost,
+            "tokens_used": tokens
+        }
+    except Exception as e:
+        logger.error(f"❌ Error refining instruction: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
